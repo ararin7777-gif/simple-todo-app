@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import type { Todo } from "@/types/todo";
 
-const STORAGE_KEY = "simple-todo-app:todos";
-
 function PlusIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
@@ -46,22 +44,33 @@ function CheckIcon() {
   );
 }
 
-function loadTodos(): Todo[] {
-  try {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    return saved ? (JSON.parse(saved) as Todo[]) : [];
-  } catch {
-    return [];
-  }
-}
-
 export default function TodoApp() {
-  const [todos, setTodos] = useState<Todo[]>(loadTodos);
+  const [todos, setTodos] = useState<Todo[]>([]);
   const [input, setInput] = useState("");
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
-  }, [todos]);
+    let cancelled = false;
+    fetch("/api/todos")
+      .then((res) => res.json())
+      .then((data: Todo[]) => {
+        if (cancelled) return;
+        setTodos(data);
+        setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    fetch("/api/todos", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(todos),
+    });
+  }, [todos, loaded]);
 
   const addTodo = () => {
     const text = input.trim();
@@ -98,7 +107,9 @@ export default function TodoApp() {
             ToDo リスト
           </h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {todos.length === 0
+            {!loaded
+              ? "読み込み中..."
+              : todos.length === 0
               ? "今日のタスクを追加しましょう"
               : `残り ${remaining} 件 / 全 ${todos.length} 件`}
           </p>
@@ -127,7 +138,7 @@ export default function TodoApp() {
           </div>
 
           <ul className="mt-4 flex flex-col gap-1.5">
-            {todos.length === 0 && (
+            {loaded && todos.length === 0 && (
               <li className="py-10 text-center text-sm text-slate-400 dark:text-slate-500">
                 タスクはまだありません
               </li>
@@ -175,7 +186,7 @@ export default function TodoApp() {
         </div>
 
         <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-600">
-          データはこの端末のブラウザ内にのみ保存されます
+          データはすべての端末で共有されます
         </p>
       </div>
     </main>
